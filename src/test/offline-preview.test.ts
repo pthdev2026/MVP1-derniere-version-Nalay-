@@ -69,3 +69,19 @@ describe('contenus de démonstration', () => {
     expect((await fetchRanking()).length).toBeGreaterThan(5);
   });
 });
+
+describe('bandeau en développement (rendu serveur déjà basculé)', () => {
+  it('API injoignable : le navigateur le découvre et affiche le bandeau ; API joignable : pas de bandeau', async () => {
+    const { renderHook, waitFor } = await import('@testing-library/react');
+    const down = await setup({ apiUrl: 'http://localhost:59999', dev: true });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('ECONNREFUSED'); }));
+    const unreachable = renderHook(() => down.useOfflinePreview());
+    await waitFor(() => expect(unreachable.result.current).toBe(true));
+
+    const up = await setup({ apiUrl: 'http://localhost:4000', dev: true });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"status":"ok"}', { status: 200 })));
+    const reachable = renderHook(() => up.useOfflinePreview());
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(reachable.result.current).toBe(false);
+  });
+});

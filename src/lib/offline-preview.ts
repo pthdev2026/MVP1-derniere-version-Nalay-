@@ -37,14 +37,24 @@ export async function withOfflineFallback<T>(online: () => Promise<T>, offline: 
   }
 }
 
-/** Vrai quand l'aperçu hors connexion est actif (met à jour le bandeau). */
+/**
+ * Vrai quand l'aperçu hors connexion est actif (met à jour le bandeau).
+ * En développement, le rendu serveur peut avoir basculé sur la démonstration sans que le navigateur le sache : on sonde alors
+ * l'API (`/health`, 2,5 s) une fois, et le bandeau s'affiche si elle est injoignable.
+ */
 export function useOfflinePreview(): boolean {
   const [active, setActive] = useState(false);
   useEffect(() => {
     const update = () => setActive(offlinePreviewActive());
     update();
     listeners.add(update);
-    return () => { listeners.delete(update); };
+    let cancelled = false;
+    if (import.meta.env.DEV && !forced() && env.apiUrl) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 2500);
+      fetch(`${env.apiUrl}/health`, { signal: controller.signal }).then(response => { if (!response.ok && !cancelled) markDegraded(); }).catch(() => { if (!cancelled) markDegraded(); }).finally(() => window.clearTimeout(timer));
+    }
+    return () => { cancelled = true; listeners.delete(update); };
   }, []);
   return active;
 }
